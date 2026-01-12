@@ -2,7 +2,7 @@ streamlit
 requests
 # trafilatura
 # langchain-ollama
-pdfplumber
+pypdf
 firecrawl-py
 python-dotenv
 openai

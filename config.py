@@ -2,7 +2,7 @@
 
 # Local Services
 SEARXNG_API_URL = "http://127.0.0.1:8080"
-# OLLAMA_MODEL = "llama3.1"
+OLLAMA_MODEL = "llama3.1"
 
 # AI Model settings
 # You can switch this to any model supported by OpenRouter

@@ -1,104 +1,91 @@
 import requests
 from firecrawl import Firecrawl
 from config import SEARXNG_API_URL, BROWSER_HEADERS
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
-# --- SEARXNG SEARCH ---
+class JobLink(BaseModel):
+    title: str = Field(description="The title of the job link found")
+    url: str = Field(description="The absolute URL to the job details")
+    company: Optional[str] = None
+    location: Optional[str] = None
+
+class SingleJobDetails(BaseModel):
+    job_title: str = Field(description="The specific role title")
+    company_name: str = Field(description="Name of the company hiring")
+    location: Optional[str] = Field(description="Job location or 'Remote'")
+    
+    # CRITICAL: We need the full text to validate quality
+    description_text: str = Field(description="The full job description and responsibilities text.")
+    
+    requirements: str = Field(description="Comprehensive list of technical skills and requirements")
+    
+    # Optional: Extract the actual apply link if it's different from the current URL
+    application_url: Optional[str] = Field(description="The URL to submit the application, if different from current page")
+
+class JobExtractionSchema(BaseModel):
+    page_type: str = Field(
+        description="Determine if this page is a list of multiple jobs ('job_list') or a specific single job description ('single_job').", 
+        enum=["job_list", "single_job"]
+    )
+    jobs_list: Optional[List[JobLink]] = Field(description="Extract this ONLY if page_type is 'job_list'.")
+    single_job: Optional[SingleJobDetails] = Field(description="Extract this ONLY if page_type is 'single_job'.")
+
+
+# --- 2. SEARXNG SEARCH ---
 
 def check_searxng_status():
-    """
-    Checks if the local SearXNG Docker container is reachable.
-    """
     try:
-        # Simple ping to the root URL
         requests.get(SEARXNG_API_URL, timeout=1)
         return True
     except:
         return False
 
 def query_searxng(query, num_results=5):
-    """
-    Queries the local SearXNG instance.
-    """
     url = f"{SEARXNG_API_URL}/search"
-    
-    params = {
-        "q": query,
-        "format": "json",
-        "language": "en-US",
-    }
-
+    params = {"q": query, "format": "json", "language": "en-US"}
     try:
         resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=10)
-        
         if resp.status_code == 200:
-            data = resp.json()
-            return data.get('results', [])[:num_results]
-        else:
-            print(f"    ❌ SearXNG Error {resp.status_code}: {resp.text}")
-            
+            return resp.json().get('results', [])[:num_results]
     except Exception as e:
-        print(f"    ❌ Search Connection Failed: {e}")
-        
+        print(f"Search failed: {e}")
     return []
 
-# --- FIRECRAWL SCRAPER ---
+# --- 3. FIRECRAWL SCRAPER ---
 
-def scrape_with_firecrawl(url, api_key, target_role):
+def scrape_with_firecrawl(url, api_key, target_role=""):
     """
-    Uses the official Firecrawl Python SDK to scrape a URL into Markdown.
+    Uses Firecrawl's JSON Extract feature with strict Schema validation.
     """
-    print(f"    🔥 Firecrawl Scraping: {url}")
+    print(f"    🔥 Firecrawl Extracting: {url}")
     
     if not api_key:
-        raise ValueError("API Key is missing/empty.")
+        raise ValueError("API Key is missing.")
+
+    app = Firecrawl(api_key=api_key)
+    
+    # Get the raw JSON schema
+    schema_json = JobExtractionSchema.model_json_schema()
 
     try:
-        # Initialize the App with the key provided
-        firecrawl = Firecrawl(api_key=api_key)
+        # --- THE FIX ---
+        # Passing schema inside the formats list as requested
+        data = app.scrape(
+            url,
+            formats=[{
+                "type": "json",
+                "schema": schema_json
+            }]
+        )
         
-        # --- THE FIX: Replaced scrape_url with scrape ---
-        # We pass params to ensure specific formats are requested
-        # scraped_data = firecrawl.scrape(url, formats=['markdown'])
-        if target_role:
-            scraped_data = firecrawl.scrape( url, formats=[ "markdown",
-                                                            {"type": "json", "prompt": f"Extract the details of every job related to the role '{target_role} in the page'. Output JSON with fields: 'job_title, company_name, location, job_description, requirements, responsabilities, salary, application_link.' for every relevant job. Name the root key as 'jobs' containing an array of jobs."}
-                                                        ],
-                                                    timeout=120000,
-                                                    actions=[
-                                                        # {"wait_for_event": "load"},
-                                                        {"type": "scroll", "direction": "down", "steps": 5},
-                                                        {"type": "wait", "milliseconds": 2000}
-                                                        ],
-                                                    only_main_content=False
-                                            )
-        else:
-            scraped_data = firecrawl.scrape(url, formats=['markdown'])
-
-        # print(f"Scraped Data:\n{scraped_data}\n")
-
-        if scraped_data:
-            if target_role:
-                return scraped_data
-            markdown = scraped_data.markdown
-            return markdown
-        return None
-        
-        # # The SDK returns a dictionary. We extract the markdown.
-        # if scraped_data and 'markdown' in scraped_data:
-        #     markdown = scraped_data['markdown']
-        #     print(f"    ✅ Success! Retrieved {len(markdown)} chars.")
-        #     return markdown
-        
-        # # Fallback: Sometimes it might return data directly or in 'data' key depending on version
-        # if scraped_data and 'data' in scraped_data and 'markdown' in scraped_data['data']:
-        #      markdown = scraped_data['data']['markdown']
-        #      print(f"    ✅ Success! Retrieved {len(markdown)} chars.")
-        #      return markdown
-        
-        # print(f"    ⚠️ Firecrawl returned no markdown content. Response keys: {scraped_data.keys() if scraped_data else 'None'}")
-        print("    ⚠️ Firecrawl returned no markdown content.")
+        # Firecrawl returns the data under the 'json' key
+        if data and data.json:
+            return data.json
+            
+        print(f"    ⚠️ Firecrawl returned no JSON data.")
         return None
         
     except Exception as e:
-        print(f"    ❌ Firecrawl SDK Error: {e}")
+        print(f"    ❌ Firecrawl Error: {e}")
         raise e
