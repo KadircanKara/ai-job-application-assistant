@@ -1,0 +1,17 @@
+.env
+venv/
+ENHANCED_FEATURES.md
+reup_docker.sh
+sample_data.json
+logs/
+__pycache__/
+searxng-docker/
+test_firecrawl_prompt.py
+test_searxng.py
+test_ai.py
+test_enhanced_app.sh
+test_firecrawl.py
+test_pipeline.py
+test.py
+file_management.py
+test_data/

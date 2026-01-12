@@ -1,0 +1,9 @@
+streamlit
+requests
+# trafilatura
+# langchain-ollama
+pdfplumber
+firecrawl-py
+python-dotenv
+openai
+pydantic
