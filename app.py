@@ -113,7 +113,7 @@ with st.sidebar:
     st.header("2. Search Strategy")
     role = st.text_input("Target Role", "Python Developer")
     location = st.text_input("Target Location", "Remote")
-    num_jobs = st.slider("Max Jobs", 1, 100, 5)
+    num_jobs = st.slider("Max Jobs", 1, 100, 5, 1)
 
 # --- MAIN LOGIC ---
 if st.button("🚀 Find & Apply"):

@@ -1,7 +1,8 @@
 streamlit
 requests
 # trafilatura
-# langchain-ollama
+langchain-ollama
+langchain
 pypdf
 firecrawl-py
 python-dotenv
