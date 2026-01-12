@@ -224,11 +224,12 @@ def generate_application_package(cv_text, job_data):
         prompt=f"""
         You are an expert Resume Writer. 
         
-        TASK: Rewrite the User's CV to target the specific job below.
+        TASK: Rewrite the User's CV to target the specific job below. Only output the full CV in Markdown format.
         
-        CONSTRAINT 1: PRESERVE STRUCTURE. Keep the exact same sections, headers, and layout style as the original CV.
-        CONSTRAINT 2: OPTIMIZE CONTENT. Rewrite the bullet points and summary to highlight skills relevant to the job description. Use keywords from the job.
-        CONSTRAINT 3: DO NOT HALLUCINATE. Do not invent experiences. Only rephrase existing ones to match the target role.
+        CONSTRAINT 1: PRESERVE STRUCTURE. Keep the exact same sections, headers, and layout style as the original CV. Add linebreaks where needed.
+        CONSTRAINT 2: FOCUS ON RELEVANCE. Only include experiences, skills, and achievements that are relevant to the target job. Remove unrelated content.
+        CONSTRAINT 3: OPTIMIZE CONTENT. Rewrite the bullet points and summary to highlight skills relevant to the job description. Use keywords from the job.
+        CONSTRAINT 4: DO NOT HALLUCINATE. Do not invent experiences. Only rephrase existing ones to match the target role.
         
         ORIGINAL CV:
         {cv_text}
@@ -247,7 +248,7 @@ def generate_application_package(cv_text, job_data):
     print(f"    ✍️ Generating Cover Letter...")
     cl_res = invoke_openrouter(
         prompt=f"""
-        You are an expert career coach and copywriter. Write a highly tailored cover letter.
+        You are an expert career coach and copywriter. Write a highly tailored cover letter. Output only full letter.
         
         MY RESUME: {cv_text}
         
@@ -271,6 +272,7 @@ def generate_application_package(cv_text, job_data):
         
         Highlight my top 3 matching skills based on: {job_data.get('requirements','')}.
         Keep it concise (<100 words).
+        Output only the full email with subject line.
 """
     )
 

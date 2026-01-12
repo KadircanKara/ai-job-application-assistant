@@ -13,7 +13,11 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 st.set_page_config(page_title="Fast AI Job Agent", layout="wide")
 st.title("⚡ AI Job Agent")
 
-# --- CACHING: PARSE CV ---
+# --- 1. SESSION STATE SETUP ---
+if "jobs_queue" not in st.session_state:
+    st.session_state.jobs_queue = []
+
+# --- CACHING ---
 @st.cache_data
 def parse_cv_pdf(file):
     try:
@@ -25,74 +29,67 @@ def parse_cv_pdf(file):
     except Exception as e:
         return None
 
-# --- SAFEGUARD: VALIDATION ---
+# --- VALIDATION ---
 def validate_job_data(job_data):
+    """
+    Ensures the extracted data actually looks like a job.
+    """
     if not job_data: return False, "No data extracted."
+    
     role = job_data.get('job_title', '')
+    company = job_data.get('company_name', '')
     desc = job_data.get('description_text', '')
     reqs = job_data.get('requirements', '')
-
-    if not role or len(role) < 3: return False, "Job Title missing."
-    if (len(desc or "") + len(reqs or "")) < 200: return False, "Content too short (Login wall?)."
+    
+    # 1. Critical Fields Check
+    if not role or len(role) < 3: 
+        return False, "Job Title missing."
+    if not company or len(company) < 2:
+        return False, "Company Name missing (likely a blog post)."
+        
+    # 2. Content Length Check (Login wall / Empty page detector)
+    if (len(desc or "") + len(reqs or "")) < 200: 
+        return False, "Content too short (Login wall?)"
+        
     return True, "Valid"
 
-# --- HELPER: PROCESS & DISPLAY ---
-def process_and_display_job(job_details, cv_text, count):
+# --- HELPER: ADD TO STATE (FAST VERSION) ---
+def add_job_to_state(job_details, source_url):
+    """
+    Validates and adds job to queue. 
+    does NOT generate assets yet (saves time).
+    """
     is_valid, reason = validate_job_data(job_details)
+    
     if not is_valid:
-        st.warning(f"⚠️ Skipping Job #{count}: {reason}")
+        st.caption(f"⚠️ Skipping invalid: {reason}")
         return False
 
-    # Normalize data
     role = job_details.get('job_title', 'Unknown Role')
     company = job_details.get('company_name', 'Unknown Company')
     
-    # Create a safe filename prefix (e.g., "Google_SeniorDev")
-    safe_filename = f"{company}_{role}".replace(" ", "_").replace("/", "-")[:30]
+    # Save Raw Data
+    job_package = {
+        "id": len(st.session_state.jobs_queue),
+        "role": role,
+        "company": company,
+        "job_details": job_details, # Store raw data for later generation
+        "apply_link": job_details.get('application_url') or source_url,
+        "assets": None # Empty initially
+    }
     
-    st.success(f"✅ Target Acquired: {role} at {company}")
-    
-    if job_details.get('application_url'):
-        st.caption(f"🔗 Apply Here: {job_details.get('application_url')}")
-    
-    # Generate Content
-    with st.spinner("✍️ Generating Assets..."):
-        assets = ai_logic.generate_application_package(cv_text, job_details)
-        
-    # --- TABS WITH DOWNLOAD BUTTONS ---
-    tab1, tab2, tab3 = st.tabs(["📄 Tailored CV", "✉️ Cover Letter", "📧 Cold Email"])
-    
-    with tab1:
-        st.text_area(f"cv_view_{count}", assets['tailored_cv'], height=400)
-        st.download_button(
-            label="💾 Download CV (.md)",
-            data=assets['tailored_cv'],
-            file_name=f"{safe_filename}_CV.md",
-            mime="text/markdown",
-            key=f"btn_cv_{count}"
-        )
-        
-    with tab2:
-        st.text_area(f"cl_view_{count}", assets['cover_letter'], height=400)
-        st.download_button(
-            label="💾 Download Cover Letter (.txt)",
-            data=assets['cover_letter'],
-            file_name=f"{safe_filename}_CoverLetter.txt",
-            mime="text/plain",
-            key=f"btn_cl_{count}"
-        )
-        
-    with tab3:
-        st.text_area(f"email_view_{count}", assets['email'], height=250)
-        st.download_button(
-            label="💾 Download Email Draft (.txt)",
-            data=assets['email'],
-            file_name=f"{safe_filename}_Email.txt",
-            mime="text/plain",
-            key=f"btn_email_{count}"
-        )
-    
+    st.session_state.jobs_queue.append(job_package)
     return True
+
+# --- HELPER: GENERATE ASSETS (SLOW VERSION) ---
+def generate_single_job_assets(job_package, cv_text):
+    """
+    Runs the AI generation for a specific job package
+    """
+    with st.spinner(f"✍️ Writing application for {job_package['company']}..."):
+        assets = ai_logic.generate_application_package(cv_text, job_package['job_details'])
+        job_package['assets'] = assets
+        st.toast(f"Generated for {job_package['company']}!", icon="✅")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -113,10 +110,16 @@ with st.sidebar:
     st.header("2. Search Strategy")
     role = st.text_input("Target Role", "Python Developer")
     location = st.text_input("Target Location", "Remote")
-    num_jobs = st.slider("Max Jobs", 1, 100, 5, 1)
+    num_jobs = st.slider("Target Jobs to Find", 1, 20, 5)
+
+    if st.button("Clear Results"):
+        st.session_state.jobs_queue = []
+        st.rerun()
 
 # --- MAIN LOGIC ---
-if st.button("🚀 Find & Apply"):
+
+# PART 1: SEARCH & SCOUT (Fast)
+if st.button("🚀 Find Jobs (Scout Mode)"):
     if not FIRECRAWL_API_KEY or not OPENROUTER_API_KEY:
         st.error("❌ Missing API Keys in .env file.")
         st.stop()
@@ -127,68 +130,129 @@ if st.button("🚀 Find & Apply"):
         st.error("🔴 SearXNG is offline. Run `docker compose up -d`.")
         st.stop()
 
-    # SEARCH QUERY
+    st.session_state.jobs_queue = []
+
     included = "(site:boards.greenhouse.io OR site:lever.co OR site:workable.com OR site:jobs.ashbyhq.com OR site:bamboohr.com)"
     loc_query = f'"{location}"' if location.strip() else ""
-    final_query = f'"{role}" {loc_query} {included}'
+    # final_query = f'"{role}" {loc_query} {included}'
+    final_query = f'"{role}" {loc_query}'
     
     st.info(f"🔎 Query: `{final_query}`")
     
-    with st.spinner("Searching..."):
-        raw_results = search_logic.query_searxng(final_query, num_results=5)
-    
-    if not raw_results:
-        st.warning("No results found.")
-        st.stop()
-
     global_processed_count = 0
-    
-    # PROCESS LOOP
-    for item in raw_results:
-        if global_processed_count >= num_jobs: break
+    current_page = 1
+    MAX_PAGES = 10
+    processed_urls = set()
+
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    while global_processed_count < num_jobs and current_page <= MAX_PAGES:
+        status_text.write(f"🔄 Searching Page {current_page}... (Found {global_processed_count}/{num_jobs})")
         
-        url = item['url']
-        
-        with st.container():
-            st.markdown(f"### 📄 Analyzing: [{item['title']}]({url})")
+        raw_results = search_logic.query_searxng(final_query, page=current_page)
+        if not raw_results: break
             
-            try:
-                with st.spinner("🔥 Extracting data..."):
+        for item in raw_results:
+            if global_processed_count >= num_jobs: break
+            url = item['url']
+            if url in processed_urls: continue
+            processed_urls.add(url)
+            
+            with st.container():
+                st.write(f"🔍 Checking: **{item['title']}**")
+                try:
                     extract_data = search_logic.scrape_with_firecrawl(url, FIRECRAWL_API_KEY, role)
-                
-                if not extract_data: continue
+                    if not extract_data: continue
 
-                page_type = extract_data.get('page_type')
+                    page_type = extract_data.get('page_type')
 
-                # CASE 1: SINGLE JOB
-                if page_type == 'single_job' and extract_data.get('single_job'):
-                    success = process_and_display_job(extract_data['single_job'], cv_text, global_processed_count + 1)
-                    if success: global_processed_count += 1
+                    # Single Job
+                    if page_type == 'single_job' and extract_data.get('single_job'):
+                        success = add_job_to_state(extract_data['single_job'], url)
+                        if success: 
+                            global_processed_count += 1
+                            progress_bar.progress(global_processed_count / num_jobs)
 
-                # CASE 2: JOB LIST
-                elif page_type == 'job_list' and extract_data.get('jobs_list'):
-                    jobs = extract_data['jobs_list']
-                    st.info(f"📋 List Detected: Found {len(jobs)} jobs. Checking deep links...")
-                    
-                    for sub_job in jobs:
-                        if global_processed_count >= num_jobs: break
+                    # Job List
+                    elif page_type == 'job_list' and extract_data.get('jobs_list'):
+                        jobs = extract_data['jobs_list']
+                        st.caption(f"📋 Found list with {len(jobs)} jobs. Scanning sub-links...")
                         
-                        link_url = sub_job.get('url')
-                        if not link_url: continue
-                        
-                        if not link_url.startswith("http"):
-                            link_url = urljoin(url, link_url)
+                        for sub_job in jobs:
+                            if global_processed_count >= num_jobs: break
+                            link_url = sub_job.get('url')
+                            if not link_url or link_url in processed_urls: continue
+                            processed_urls.add(link_url)
                             
-                        st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;↳ **Deep Diving:** {sub_job.get('title')}")
-                        
-                        sub_data = search_logic.scrape_with_firecrawl(link_url, FIRECRAWL_API_KEY, role)
-                        
-                        if sub_data and sub_data.get('single_job'):
-                            success = process_and_display_job(sub_data['single_job'], cv_text, global_processed_count + 1)
-                            if success: global_processed_count += 1
+                            if not link_url.startswith("http"):
+                                link_url = urljoin(url, link_url)
+                                
+                            sub_data = search_logic.scrape_with_firecrawl(link_url, FIRECRAWL_API_KEY, role)
+                            if sub_data and sub_data.get('single_job'):
+                                success = add_job_to_state(sub_data['single_job'], link_url)
+                                if success: 
+                                    global_processed_count += 1
+                                    progress_bar.progress(global_processed_count / num_jobs)
 
-            except Exception as e:
-                st.error(f"⚠️ Error: {e}")
-                continue
+                except Exception as e:
+                    continue
+        current_page += 1
+    
+    status_text.empty()
+    progress_bar.empty()
+    
+    if global_processed_count > 0:
+        st.success(f"🎯 Found {global_processed_count} relevant jobs! Review and Generate below.")
+    else:
+        st.error("No valid jobs found.")
+
+# PART 2: RENDERING & GENERATION
+if st.session_state.jobs_queue:
+    st.divider()
+    
+    # "Generate All" Button
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.subheader(f"✅ Job Queue ({len(st.session_state.jobs_queue)})")
+    with col2:
+        if st.button("⚡ Generate ALL Assets"):
+            progress_bar = st.progress(0)
+            for i, job in enumerate(st.session_state.jobs_queue):
+                if not job['assets']:
+                    generate_single_job_assets(job, cv_text)
+                progress_bar.progress((i + 1) / len(st.session_state.jobs_queue))
+            st.rerun()
+
+    for i, job in enumerate(st.session_state.jobs_queue):
+        with st.expander(f"📄 {job['role']} @ {job['company']}", expanded=(job['assets'] is None)):
             
-            st.divider()
+            # Show Links
+            if job['apply_link']:
+                st.markdown(f"🔗 **[Apply Here]({job['apply_link']})**")
+            
+            # State: Assets NOT Generated
+            if job['assets'] is None:
+                st.info("Job data extracted. Ready to write application.")
+                if st.button(f"✍️ Generate Application", key=f"gen_{i}"):
+                    generate_single_job_assets(job, cv_text)
+                    st.rerun()
+            
+            # State: Assets GENERATED
+            else:
+                assets = job['assets']
+                safe_filename = f"{job['company']}_{job['role']}".replace(" ", "_")[:20]
+                
+                tab1, tab2, tab3 = st.tabs(["Tailored CV", "Cover Letter", "Cold Email"])
+                
+                with tab1:
+                    st.text_area("CV Content", assets['tailored_cv'], height=300, key=f"cv_{i}")
+                    st.download_button("💾 Download CV", assets['tailored_cv'], f"{safe_filename}_CV.md", "text/markdown", key=f"btn_cv_{i}")
+                    
+                with tab2:
+                    st.text_area("CL Content", assets['cover_letter'], height=300, key=f"cl_{i}")
+                    st.download_button("💾 Download CL", assets['cover_letter'], f"{safe_filename}_CL.txt", "text/plain", key=f"btn_cl_{i}")
+                    
+                with tab3:
+                    st.text_area("Email Content", assets['email'], height=200, key=f"em_{i}")
+                    st.download_button("💾 Download Email", assets['email'], f"{safe_filename}_Email.txt", "text/plain", key=f"btn_em_{i}")

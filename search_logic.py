@@ -41,16 +41,31 @@ def check_searxng_status():
     except:
         return False
 
-def query_searxng(query, num_results=5):
+def query_searxng(query, page=1):
+    """
+    Queries SearXNG with pagination support.
+    """
     url = f"{SEARXNG_API_URL}/search"
-    params = {"q": query, "format": "json", "language": "en-US"}
+    params = {
+        "q": query,
+        "format": "json",
+        "language": "en-US",
+        "pageno": page  # <--- Added Pagination Parameter
+    }
+    
     try:
         resp = requests.get(url, params=params, headers=BROWSER_HEADERS, timeout=10)
+        
         if resp.status_code == 200:
-            return resp.json().get('results', [])[:num_results]
+            data = resp.json()
+            return data.get('results', [])
+        else:
+            print(f"    ❌ SearXNG Error {resp.status_code}")
+            return []
+            
     except Exception as e:
-        print(f"Search failed: {e}")
-    return []
+        print(f"    ❌ Search Connection Failed: {e}")
+        return []
 
 # --- 3. FIRECRAWL SCRAPER ---
 
