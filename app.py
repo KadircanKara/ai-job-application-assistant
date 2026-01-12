@@ -119,7 +119,7 @@ with st.sidebar:
 # --- MAIN LOGIC ---
 
 # PART 1: SEARCH & SCOUT (Fast)
-if st.button("🚀 Find Jobs (Scout Mode)"):
+if st.button("🚀 Find Jobs"):
     if not FIRECRAWL_API_KEY or not OPENROUTER_API_KEY:
         st.error("❌ Missing API Keys in .env file.")
         st.stop()

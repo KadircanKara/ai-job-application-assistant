@@ -1,128 +1,89 @@
 # AI Job Application Assistant (Streamlit)
 
-A focused, streamlined AI-powered job application assistant using Streamlit with local SearXNG integration.
+A streamlined, efficient AI-powered job application assistant. This tool automates the process of finding jobs, extracting their details, and generating tailored application materials using **Firecrawl** and **OpenRouter**.
 
 ## 🚀 Quick Start
 
-### Option 1: Automated Launcher (Recommended)
-```bash
-./start_app.sh
+### Prerequisites
+
+1.  **Docker**: Required for running the local SearXNG search engine.
+2.  **API Keys**:
+    *   **Firecrawl**: For robust, schema-based web scraping ([firecrawl.dev](https://firecrawl.dev)).
+    *   **OpenRouter**: For AI text generation ([openrouter.ai](https://openrouter.ai)).
+3.  **SearXNG Setup**:
+    *   Clone the official repository to your working directory:
+        ```bash
+        git clone https://github.com/searxng/searxng-docker.git
+        ```
+    *   **Important**: Follow the official setup instructions carefully to ensure the instance runs correctly.
+
+### 1. Configure Environment
+
+Create a `.env` file in the root directory:
+
+```env
+OPENROUTER_API_KEY=your_openrouter_key
+FIRECRAWL_API_KEY=your_firecrawl_key
 ```
-This script automatically handles virtual environment, dependencies, container startup, and launches the app.
 
-### Option 2: Manual Setup
+### 2. Start Services
 
-#### 1. Install Dependencies
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\\Scripts\\activate
-pip install -r requirements.txt
-```
+Start the local search engine (SearXNG):
 
-#### 2. Configure API Key
-Edit `.env` file and add your OpenRouter API key:
-```
-OPENROUTER_API_KEY=your-openrouter-api-key-here
-```
-
-Get your free API key from [OpenRouter.ai](https://openrouter.ai)
-
-#### 3. Start SearXNG Containers
 ```bash
 cd searxng-docker
 docker compose up -d
 cd ..
 ```
 
-#### 4. Run Application
+### 3. Install & Run
+
 ```bash
+# create virtual env
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# install dependencies
+pip install -r requirements.txt
+
+# run the app
 streamlit run app.py
 ```
 
 ## 🎯 Features
 
-- 📁 **CV Upload**: Upload PDF, DOC, DOCX, or TXT files
-- 🔍 **Job Search**: Search using local SearXNG with keywords and location
-- 🤖 **AI Generation**: Generate tailored CVs, cover letters, and emails using Llama 4 Scout
-- 🐳 **Container Management**: Automatic SearXNG container status monitoring
-- 🌐 **Privacy-First**: Local SearXNG instance ensures search privacy
-- 🔄 **Auto-Fallback**: Seamless fallback to public SearXNG instances
-- 🌐 **Simple UI**: Clean, focused Streamlit interface
+-   📁 **CV Parsing**: Upload PDF resumes or paste text directly.
+-   🔍 **Privacy-First Search**: Uses local **SearXNG** to find relevant job postings without tracking.
+-   🔥 **Smart Extraction**: Integrated with **Firecrawl** to extract structured job data (Role, Company, Requirements) from any URL.
+-   ✍️ **Auto-Generation**: Generates tailored assets using **OpenRouter** (e.g., Xiaomi Mimo, Llama 3 via API):
+    -   **Tailored CV**: Rewrites your CV markdown to emphasize relevant skills.
+    -   **Cover Letter**: Professional, context-aware letters.
+    -   **Cold Email**: Short, punchy outreach emails.
 
 ## 🛠️ Core Components
 
-- `app.py` - Main Streamlit application
-- `scrapers/searxng_client.py` - SearXNG search client with local instance support
-- `temp/ai_generator.py` - AI content generation with Llama 4 Scout
-- `scrapers/container_validator.py` - Docker container management
-- `searxng-docker/` - Local SearXNG instance configuration
-- `start_app.sh` - Automated launcher script
+-   `app.py`: Main Streamlit application and UI logic.
+-   `search_logic.py`: Handles **SearXNG** queries and **Firecrawl** schema extraction.
+-   `ai_logic.py`: Connects to **OpenRouter** to generate application content.
+-   `config.py`: Central configuration.
 
-## 📝 Usage
+## 📝 Usage Flow
 
-1. **Upload CV**: Use the file uploader to add your CV
-2. **Enter Keywords**: Type job titles or skills (e.g., "Software Engineer")
-3. **Add Location**: Optional location filter
-4. **Search Jobs**: Click search to find relevant positions
-5. **Generate Materials**: Click "Generate Application" for any job
-
-## 🔑 API Configuration
-
-- **Llama 4 Scout**: Free via OpenRouter.ai
-- **SearXNG**: Privacy-respecting search engine
-- **No API costs**: Llama 4 Scout is free on OpenRouter tier
+1.  **Input CV**: Upload your PDF resume.
+2.  **Search**: Enter a job role (e.g., "Python Developer") and location.
+3.  **Find**: The app searches the web and uses Firecrawl to detect valid job listings.
+4.  **Generate**: Click "Generate Application" on any job to create your custom CV and Cover Letter.
 
 ## 🏗️ Project Structure
 
 ```
 ai_job_application_assistant/
-├── app.py                     # Main Streamlit app
-├── start_app.sh              # Automated launcher
-├── requirements.txt           # Dependencies
-├── .env                      # Environment variables
-├── temp/
-│   └── ai_generator.py       # Llama 4 Scout integration
-├── scrapers/
-│   ├── searxng_client.py     # Search with local SearXNG
-│   └── container_validator.py # Docker container management
-├── searxng-docker/           # Local SearXNG setup
-│   ├── docker-compose.yaml
-│   └── searxng/
-├── uploads/                  # CV storage
+├── app.py                     # Main UI
+├── ai_logic.py               # Generation logic (OpenRouter)
+├── search_logic.py           # Search (SearXNG) & Scrape (Firecrawl)
+├── config.py                 # Configuration
+├── requirements.txt           # Python dependencies
+├── .env                      # API Keys (not committed)
+├── searxng-docker/           # Docker setup for search engine
 └── logs/                     # Application logs
 ```
-
-## 🤖 AI Agent Focus
-
-This project is designed around AI agents:
-- **Search Agent**: Finds relevant job postings
-- **Scraping Agent**: Extracts job details
-- **Generation Agent**: Creates tailored application materials
-
-## 🌐 Free Services Used
-
-- **Llama 4 Scout**: Free AI model for document analysis
-- **SearXNG**: Free, privacy-respecting search
-- **OpenRouter**: Free API access to Llama models
-
-## 🐳 Container Management
-
-The app includes automatic SearXNG container validation:
-
-- **Status Monitoring**: Real-time display of container health
-- **Auto-Start**: One-click container startup
-- **Validation**: Ensures containers are running before searches
-- **Fallback**: Graceful handling when containers are unavailable
-
-### Container Status Indicators
-- ✅ **All Running**: Ready for job searches
-- ⚠️ **Partial**: Some containers need attention
-- ❌ **Down**: Use "Start Containers" button
-
-## 📝 Next Steps
-
-This is a focused foundation with working local SearXNG integration. Future enhancements:
-- Enhanced job scraping and parsing
-- More AI agents for specialized tasks
-- Automation workflows
-- Additional container services
